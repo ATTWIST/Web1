@@ -1,30 +1,18 @@
-const express = require("express");
-const multer = require("multer");
 const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require("@google/generative-ai");
-const path = require('path');
 
-const app = express();
-const port = 3000;
-
-// Multer configuration
-const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
-
-app.use(express.json());
-
-const MODEL_NAME = "gemini-pro-vision";
-const API_KEY = "AIzaSyD_sD1sDSToBchi5Uk5LnyrfnMmIgwuud4"; // 여기에 Google API 키를 입력하세요.
-
-app.post("/generateRecipe", upload.single('myImage'), async (req, res) => {
+exports.handler = async function(event, context) {
   try {
     // Check if the file is uploaded
-    if (!req.file) {
-      return res.status(400).send("No file uploaded.");
+    if (!event.body || !event.isBase64Encoded) {
+      return {
+        statusCode: 400,
+        body: "No file uploaded."
+      };
     }
 
     // Process the uploaded file (req.file.buffer)
-    const genAI = new GoogleGenerativeAI(API_KEY);
-    const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+    const genAI = new GoogleGenerativeAI(process.env.API_KEY);
+    const model = genAI.getGenerativeModel({ model: process.env.MODEL_NAME });
 
     const generationConfig = {
       temperature: 0.4,
@@ -53,7 +41,7 @@ app.post("/generateRecipe", upload.single('myImage'), async (req, res) => {
     ];
 
     const parts = [
-      { inlineData: { mimeType: "image/jpeg", data: req.file.buffer.toString("base64") } },
+      { inlineData: { mimeType: "image/jpeg", data: Buffer.from(event.body, 'base64').toString('base64') } },
     ];
 
     const result = await model.generateContent({
@@ -62,19 +50,15 @@ app.post("/generateRecipe", upload.single('myImage'), async (req, res) => {
       safetySettings,
     });
 
-    const response = result.response;
-    res.send(response.text());
+    return {
+      statusCode: 200,
+      body: result.response.text()
+    };
   } catch (error) {
     console.error('GoogleGenerativeAI Error:', error);
-    res.status(500).send("Internal Server Error");
+    return {
+      statusCode: 500,
+      body: "Internal Server Error"
+    };
   }
-});
-
-// Serve the client-side HTML file
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-});
+};
